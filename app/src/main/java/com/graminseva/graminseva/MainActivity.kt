@@ -5,11 +5,31 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -18,12 +38,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.navigation.NavHostController
-import androidx.navigation.compose.*
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseException
-import com.google.firebase.auth.*
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.PhoneAuthCredential
+import com.google.firebase.auth.PhoneAuthOptions
+import com.google.firebase.auth.PhoneAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
 import com.graminseva.graminseva.ui.theme.GraminSevaTheme
 import java.util.concurrent.TimeUnit
@@ -82,25 +106,23 @@ fun AppNavigation(auth: FirebaseAuth) {
 
                 if (selectedRole == "User") {
 
-                    db.collection("users").document(phone).get()
-                        .addOnSuccessListener { doc ->
-                            if (doc.exists()) {
-                                navController.navigate("services")
-                            } else {
-                                navController.navigate("register")
-                            }
+                    db.collection("users").document(phone).get().addOnSuccessListener { doc ->
+                        if (doc.exists()) {
+                            navController.navigate("services")
+                        } else {
+                            navController.navigate("register")
                         }
+                    }
 
                 } else {
 
-                    db.collection("workers").document(phone).get()
-                        .addOnSuccessListener { doc ->
-                            if (doc.exists()) {
-                                navController.navigate("worker_dashboard")
-                            } else {
-                                navController.navigate("register")
-                            }
+                    db.collection("workers").document(phone).get().addOnSuccessListener { doc ->
+                        if (doc.exists()) {
+                            navController.navigate("worker_dashboard")
+                        } else {
+                            navController.navigate("register")
                         }
+                    }
                 }
             }
         }
@@ -132,7 +154,9 @@ fun AppNavigation(auth: FirebaseAuth) {
 fun RoleSelectionScreen(onSelect: (String) -> Unit) {
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -159,24 +183,26 @@ fun LoginScreen(auth: FirebaseAuth, onCodeSent: (String) -> Unit) {
     var phone by remember { mutableStateOf("") }
     val context = LocalContext.current
 
-    Column(Modifier.fillMaxSize().padding(24.dp)) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(24.dp)
+    ) {
 
         OutlinedTextField(
             value = phone,
             onValueChange = { phone = it },
-            label = { Text("Phone (+91XXXXXXXXXX)") },
+            label = { Text("Phone (+91 XXXXXXXXXX)") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-            modifier = Modifier.fillMaxWidth()
-        )
+            modifier = Modifier.fillMaxWidth(),
+            prefix = { Text("+91 ") })
 
         Spacer(Modifier.height(16.dp))
 
         Button(onClick = {
 
-            val options = PhoneAuthOptions.newBuilder(auth)
-                .setPhoneNumber(phone)
-                .setTimeout(60L, TimeUnit.SECONDS)
-                .setActivity(context as MainActivity)
+            val options = PhoneAuthOptions.newBuilder(auth).setPhoneNumber("+91$phone")
+                .setTimeout(2L, TimeUnit.MINUTES).setActivity(context as MainActivity)
                 .setCallbacks(object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
 
                     override fun onVerificationCompleted(credential: PhoneAuthCredential) {
@@ -184,10 +210,13 @@ fun LoginScreen(auth: FirebaseAuth, onCodeSent: (String) -> Unit) {
                     }
 
                     override fun onVerificationFailed(e: FirebaseException) {
+                        println(e.message)
                         Toast.makeText(context, e.message, Toast.LENGTH_LONG).show()
                     }
 
-                    override fun onCodeSent(id: String, token: PhoneAuthProvider.ForceResendingToken) {
+                    override fun onCodeSent(
+                        id: String, token: PhoneAuthProvider.ForceResendingToken
+                    ) {
                         onCodeSent(id)
                     }
                 }).build()
@@ -208,7 +237,11 @@ fun OtpVerifyScreen(verificationId: String, auth: FirebaseAuth, onSuccess: () ->
     var otp by remember { mutableStateOf("") }
     val context = LocalContext.current
 
-    Column(Modifier.fillMaxSize().padding(24.dp)) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(24.dp)
+    ) {
 
         OutlinedTextField(
             value = otp,
@@ -221,13 +254,15 @@ fun OtpVerifyScreen(verificationId: String, auth: FirebaseAuth, onSuccess: () ->
 
         Button(onClick = {
 
-            val credential = PhoneAuthProvider.getCredential(verificationId, otp)
+            if (!otp.isEmpty()) {
+                println("Verifying OTP")
+                val credential = PhoneAuthProvider.getCredential(verificationId, otp.trim())
 
-            auth.signInWithCredential(credential)
-                .addOnSuccessListener { onSuccess() }
-                .addOnFailureListener {
-                    Toast.makeText(context, "Invalid OTP", Toast.LENGTH_SHORT).show()
-                }
+                auth.signInWithCredential(credential).addOnSuccessListener { onSuccess() }
+                    .addOnFailureListener {
+                        Toast.makeText(context, it.message, Toast.LENGTH_SHORT).show()
+                    }
+            }
 
         }) {
             Text("Verify")
@@ -250,7 +285,11 @@ fun RegistrationScreen(role: String, auth: FirebaseAuth, navController: NavHostC
     var experience by remember { mutableStateOf("") }
     var available by remember { mutableStateOf(true) }
 
-    Column(Modifier.fillMaxSize().padding(24.dp)) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(24.dp)
+    ) {
 
         Text("Register as $role", fontSize = 20.sp)
 
@@ -264,8 +303,10 @@ fun RegistrationScreen(role: String, auth: FirebaseAuth, navController: NavHostC
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(available, { available = it })
-                Text(if (available) "Available" else "Not Available",
-                    color = if (available) Color.Green else Color.Red)
+                Text(
+                    if (available) "Available" else "Not Available",
+                    color = if (available) Color.Green else Color.Red
+                )
             }
         }
 
@@ -284,10 +325,9 @@ fun RegistrationScreen(role: String, auth: FirebaseAuth, navController: NavHostC
                     "phone" to phone
                 )
 
-                db.collection("users").document(phone).set(userData)
-                    .addOnSuccessListener {
-                        navController.navigate("services")
-                    }
+                db.collection("users").document(phone).set(userData).addOnSuccessListener {
+                    navController.navigate("services")
+                }
 
             } else {
 
@@ -301,10 +341,9 @@ fun RegistrationScreen(role: String, auth: FirebaseAuth, navController: NavHostC
                     "phone" to phone
                 )
 
-                db.collection("workers").document(phone).set(workerData)
-                    .addOnSuccessListener {
-                        navController.navigate("worker_dashboard")
-                    }
+                db.collection("workers").document(phone).set(workerData).addOnSuccessListener {
+                    navController.navigate("worker_dashboard")
+                }
             }
 
         }) {
@@ -325,26 +364,30 @@ fun WorkerListScreen(service: String, auth: FirebaseAuth) {
 
         val phone = auth.currentUser?.phoneNumber ?: return@LaunchedEffect
 
-        db.collection("users").document(phone).get()
-            .addOnSuccessListener { userDoc ->
+        db.collection("users").document(phone).get().addOnSuccessListener { userDoc ->
 
-                val village = userDoc.getString("village") ?: ""
+            val village = userDoc.getString("village") ?: ""
 
-                db.collection("workers")
-                    .whereEqualTo("profession", service)
-                    .whereEqualTo("village", village)
-                    .whereEqualTo("available", true)
-                    .get()
-                    .addOnSuccessListener { result ->
-                        workers.clear()
-                        for (doc in result) workers.add(doc.data)
-                    }
-            }
+            db.collection("workers").whereEqualTo("profession", service)
+                .whereEqualTo("village", village).whereEqualTo("available", true).get()
+                .addOnSuccessListener { result ->
+                    workers.clear()
+                    for (doc in result) workers.add(doc.data)
+                }
+        }
     }
 
-    LazyColumn(Modifier.fillMaxSize().padding(16.dp)) {
+    LazyColumn(
+        Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
         items(workers) { worker ->
-            Card(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp)
+            ) {
                 Column(Modifier.padding(16.dp)) {
                     Text(worker["name"].toString(), fontWeight = FontWeight.Bold)
                     Text("Experience: ${worker["experience"]} years")
@@ -363,6 +406,7 @@ fun WorkerDashboardScreen() {
         Text("Worker Dashboard", fontSize = 22.sp)
     }
 }
+
 @Composable
 fun ServiceListScreen(onSelect: (String) -> Unit) {
 
@@ -378,11 +422,9 @@ fun ServiceListScreen(onSelect: (String) -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(8.dp)
-                    .clickable { onSelect(service) }
-            ) {
+                    .clickable { onSelect(service) }) {
                 Text(
-                    text = service.uppercase(),
-                    modifier = Modifier.padding(16.dp)
+                    text = service.uppercase(), modifier = Modifier.padding(16.dp)
                 )
             }
         }
